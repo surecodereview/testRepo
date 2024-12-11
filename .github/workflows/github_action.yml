@@ -37,19 +37,45 @@ jobs:
     - name: API calling for CodeReview
       id: api_call
       run: |
-            ESCAPED_DIFF=$(echo "$DIFF_CONTENT" | jq -sRr @json)
-            REQUEST_BODY=$(jq -n \
-              --arg model "${{ secrets.REVIEW_MODEL_NAME }}" \
-              --arg prompt "Review the following code changes and provide feedback:$ESCAPED_DIFF" \
-              '{model: $model, prompt: $prompt, stream: false}')
-            FULL_RESPONSE=$(curl -X POST ${REVIEW_API_URL} \
-              -H "Content-Type: application/json" \
-              -d "$REQUEST_BODY")
-            REVIEW_RESPONSE=$(echo $FULL_RESPONSE | jq -r '.response')
-            echo "Review Response: $REVIEW_RESPONSE"
-            echo "REVIEW_RESPONSE<<EOF" >> $GITHUB_ENV
-            echo "$REVIEW_RESPONSE" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+        # Step 1: Print DIFF_CONTENT to debug if it's correctly captured
+        echo "DIFF_CONTENT: $DIFF_CONTENT"
+        
+        # Step 2: Escape DIFF_CONTENT to ensure it is valid JSON
+        ESCAPED_DIFF=$(echo "$DIFF_CONTENT" | jq -sRr @json)
+        echo "Escaped DIFF: $ESCAPED_DIFF"
+        
+        # Step 3: Create the request body
+        REQUEST_BODY=$(jq -n \
+          --arg model "${{ secrets.REVIEW_MODEL_NAME }}" \
+          --arg prompt "Review the following code changes and provide feedback:$ESCAPED_DIFF" \
+          '{model: $model, prompt: $prompt, stream: false}')
+        
+        # Step 4: Output the REQUEST_BODY to verify its correctness
+        echo "Request Body: $REQUEST_BODY"
+        
+        # Step 5: Send the POST request to the review API with detailed logging
+        echo "Sending request to $REVIEW_API_URL"
+        FULL_RESPONSE=$(curl -v -X POST $REVIEW_API_URL \
+          -H "Content-Type: application/json" \
+          -d "$REQUEST_BODY" || echo "Curl request failed")
+        
+        # Step 6: Print the full response for debugging
+        echo "Full Response: $FULL_RESPONSE"
+        
+        # Step 7: Extract the review response from the full response
+        REVIEW_RESPONSE=$(echo "$FULL_RESPONSE" | jq -r '.response' || echo "Error: Failed to parse response")
+        
+        # Step 8: Check if the review response is empty and handle the error
+        if [ -z "$REVIEW_RESPONSE" ]; then
+          echo "Error: No review response received from the API"
+        else
+          echo "Review Response: $REVIEW_RESPONSE"
+        fi
+        
+        # Step 9: Save the review response to GitHub environment variables
+        echo "REVIEW_RESPONSE<<EOF" >> $GITHUB_ENV
+        echo "$REVIEW_RESPONSE" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
  
     - name: Add review to pull request
       uses: actions/github-script@v6
